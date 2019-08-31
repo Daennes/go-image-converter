@@ -6,9 +6,11 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"golang.org/x/image/bmp"
 )
@@ -25,33 +27,49 @@ func ConvertImagesFromPathToPath(path string, targetPath string, format string) 
 	splittedPath := strings.Split(path, string(os.PathSeparator))
 	srcDirName := splittedPath[len(splittedPath)-1]
 	fmt.Println(srcDirName)
+
+	sem := make(chan struct{}, int(math.Min(float64(4), float64(len(imagePaths)))))
+
+	wg := &sync.WaitGroup{}
+	wg.Add(len(imagePaths))
+	done := func() {
+		wg.Done()
+		<-sem
+	}
+
 	for _, imagePath := range imagePaths {
-		img, _, err := readFile(imagePath)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		imagePathWithoutExt := strings.TrimSuffix(imagePath, filepath.Ext(imagePath))
-		splittedImagePath := strings.Split(imagePathWithoutExt, string(os.PathSeparator))
-
-		filePathFromSrcDir := make([]string, 0)
-		foundBase := false
-		for i := 0; i < len(splittedImagePath); i++ {
-			if foundBase {
-				filePathFromSrcDir = append(filePathFromSrcDir, splittedImagePath[i])
+		sem <- struct{}{}
+		go func(imagePath string, srcDirName string) {
+			defer done()
+			img, _, err := readFile(imagePath)
+			if err != nil {
+				fmt.Println(err)
+				return
 			}
-			if splittedImagePath[i] == srcDirName {
-				foundBase = true
-			}
-		}
 
-		newImagePath := filepath.Join(targetPath, filepath.Join(filePathFromSrcDir...)) + "." + format
-		err = saveImageToFile(img, newImagePath, format)
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println("Saved succesfuly: ", filepath.Join(filePathFromSrcDir...))
+			imagePathWithoutExt := strings.TrimSuffix(imagePath, filepath.Ext(imagePath))
+			splittedImagePath := strings.Split(imagePathWithoutExt, string(os.PathSeparator))
+
+			filePathFromSrcDir := make([]string, 0)
+			foundBase := false
+			for i := 0; i < len(splittedImagePath); i++ {
+				if foundBase {
+					filePathFromSrcDir = append(filePathFromSrcDir, splittedImagePath[i])
+				}
+				if splittedImagePath[i] == srcDirName {
+					foundBase = true
+				}
+			}
+
+			newImagePath := filepath.Join(targetPath, filepath.Join(filePathFromSrcDir...)) + "." + format
+			err = saveImageToFile(img, newImagePath, format)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Println("Saved succesfuly: ", filepath.Join(filePathFromSrcDir...))
+		}(imagePath, srcDirName)
+
 	}
 	return nil, nil
 }
