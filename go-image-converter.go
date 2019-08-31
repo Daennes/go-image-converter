@@ -2,148 +2,103 @@ package converter
 
 import (
 	"fmt"
-	"log"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
+	"os"
 	"path/filepath"
-)
+	"strings"
 
-type image struct {
-	basename string
-	path     string
-	data     []byte
-}
+	"golang.org/x/image/bmp"
+)
 
 func ConvertImages(images []byte, format string) ([]byte, error) {
 	return nil, nil
 }
 
 func ConvertImagesFromPathToPath(path string, targetPath string, format string) ([]byte, error) {
-	loadImages(path)
+	imagePaths, err := listImages(path)
+	if err != nil {
+		return nil, err
+	}
+	splittedPath := strings.Split(path, string(os.PathSeparator))
+	srcDirName := splittedPath[len(splittedPath)-1]
+	fmt.Println(srcDirName)
+	for _, imagePath := range imagePaths {
+		img, _, err := readFile(imagePath)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		imagePathWithoutExt := strings.TrimSuffix(imagePath, filepath.Ext(imagePath))
+		splittedImagePath := strings.Split(imagePathWithoutExt, string(os.PathSeparator))
+
+		filePathFromSrcDir := make([]string, 0)
+		foundBase := false
+		for i := 0; i < len(splittedImagePath); i++ {
+			if foundBase {
+				filePathFromSrcDir = append(filePathFromSrcDir, splittedImagePath[i])
+			}
+			if splittedImagePath[i] == srcDirName {
+				foundBase = true
+			}
+		}
+
+		newImagePath := filepath.Join(targetPath, filepath.Join(filePathFromSrcDir...)) + "." + format
+		err = saveImageToFile(img, newImagePath, format)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("Saved succesfuly: ", filepath.Join(filePathFromSrcDir...))
+	}
 	return nil, nil
 }
 
-func loadImages(path string) []image {
-	files, err := filepath.Glob(path)
+func listImages(path string) ([]string, error) {
+	files, err := filepath.Glob(filepath.Join(path, "**/*.jpg"))
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	fmt.Println(files)
-	return nil
+	fmt.Println(len(files))
+	return files, nil
 }
 
-// // Decoders -----------
-// func decodeImage(data []byte, format string) (image.Image, error) {
-// 	format = strings.ToLower(format)
-// 	switch format {
-// 	case "image/png", "png":
-// 		return decodePNG(data)
+func readFile(path string) (image.Image, string, error) {
+	reader, err := os.Open(path)
+	if err != nil {
+		return nil, "", err
+	}
+	defer reader.Close()
+	return image.Decode(reader)
+}
 
-// 	case "image/jpeg", "jpeg", "jpg":
-// 		return decodeJPEG(data)
+func saveImageToFile(data image.Image, path string, tagetFormat string) error {
+	basePath := filepath.Dir(path)
+	if _, err := os.Stat(basePath); os.IsNotExist(err) {
+		os.MkdirAll(basePath, 0777)
+	}
 
-// 	case "image/gif", "gif":
-// 		return decodeGIF(data)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0777)
+	if err != nil {
+		return err
+	}
 
-// 	case "image/bmp", "bmp", "bitmap":
-// 		return decodeBMP(data)
-// 	default:
-// 		return nil, fmt.Errorf("Format not supported")
-// 	}
-// }
+	defer f.Close()
 
-// func decodePNG(data []byte) (image.Image, error) {
-// 	return png.Decode(bytes.NewReader(data))
-// }
+	switch tagetFormat {
+	case "png":
+		err = png.Encode(f, data)
+	case "jpeg":
+		err = jpeg.Encode(f, data, nil)
+	case "gif":
+		err = gif.Encode(f, data, nil)
+	case "bmp":
+		err = bmp.Encode(f, data)
+	default:
+		return fmt.Errorf("Image format not supported")
+	}
 
-// func decodeJPEG(data []byte) (image.Image, error) {
-// 	return jpeg.Decode(bytes.NewReader(data))
-// }
-
-// func decodeGIF(data []byte) (image.Image, error) {
-// 	return gif.Decode(bytes.NewReader(data))
-// }
-
-// func decodeBMP(data []byte) (image.Image, error) {
-// 	return bmp.Decode(bytes.NewReader(data))
-// }
-
-// // Encoders -----------
-// func (I *Image) saveImgToPNG(path string) error {
-// 	fullOutputPath := []string{path, "/", I.filename, ".png"}
-
-// 	if _, err := os.Stat(path); os.IsNotExist(err) {
-// 		os.MkdirAll(path, 0777)
-// 	}
-
-// 	img, err := decodeImage(I.data, I.imagetype)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	f, err := os.OpenFile(strings.Join(fullOutputPath, ""), os.O_WRONLY|os.O_CREATE, 0777)
-// 	if err != nil {
-
-// 		return err
-// 	}
-
-// 	return png.Encode(f, img)
-// }
-
-// func (I *Image) saveImgToJPEG(path string) error {
-// 	fullOutputPath := []string{path, "/", I.filename, ".jpeg"}
-
-// 	if _, err := os.Stat(path); os.IsNotExist(err) {
-// 		os.MkdirAll(path, 0777)
-// 	}
-
-// 	img, err := decodeImage(I.data, I.imagetype)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	f, err := os.OpenFile(strings.Join(fullOutputPath, ""), os.O_WRONLY|os.O_CREATE, 0777)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return jpeg.Encode(f, img, nil)
-// }
-
-// func (I *Image) saveImgToGIF(path string) error {
-// 	fullOutputPath := []string{path, "/", I.filename, ".gif"}
-
-// 	if _, err := os.Stat(path); os.IsNotExist(err) {
-// 		os.MkdirAll(path, 0777)
-// 	}
-
-// 	img, err := decodeImage(I.data, I.imagetype)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	f, err := os.OpenFile(strings.Join(fullOutputPath, ""), os.O_WRONLY|os.O_CREATE, 0777)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer f.Close()
-// 	return gif.Encode(f, img, nil)
-// }
-
-// func (I *Image) saveImgToBitmap(path string) error {
-// 	fullOutputPath := []string{path, "/", I.filename, ".bmp"}
-
-// 	if _, err := os.Stat(path); os.IsNotExist(err) {
-// 		os.MkdirAll(path, 0777)
-// 	}
-
-// 	img, err := decodeImage(I.data, I.imagetype)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	f, err := os.OpenFile(strings.Join(fullOutputPath, ""), os.O_WRONLY|os.O_CREATE, 0777)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer f.Close()
-// 	return bmp.Encode(f, img)
-// }
+	return err
+}
