@@ -20,13 +20,14 @@ func ConvertImages(images []byte, format string) ([]byte, error) {
 }
 
 func ConvertImagesFromPathToPath(path string, targetPath string, format string) ([]byte, error) {
+	fmt.Println(path)
 	imagePaths, err := listImages(path)
 	if err != nil {
 		return nil, err
 	}
+
 	splittedPath := strings.Split(path, string(os.PathSeparator))
-	srcDirName := splittedPath[len(splittedPath)-1]
-	fmt.Println(srcDirName)
+	srcDirName := splittedPath[len(splittedPath)-2]
 
 	sem := make(chan struct{}, int(math.Min(float64(4), float64(len(imagePaths)))))
 
@@ -75,7 +76,7 @@ func ConvertImagesFromPathToPath(path string, targetPath string, format string) 
 }
 
 func listImages(path string) ([]string, error) {
-	files, err := filepath.Glob(filepath.Join(path, "**/*.jpg"))
+	files, err := filepath.Glob(filepath.Join(path, "**/*"))
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func saveImageToFile(data image.Image, path string, tagetFormat string) error {
 	if _, err := os.Stat(basePath); os.IsNotExist(err) {
 		os.MkdirAll(basePath, 0777)
 	}
-
+	fmt.Println(basePath, path)
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0777)
 	if err != nil {
 		return err
